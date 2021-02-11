@@ -74,7 +74,15 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CDP4Composition\CDP4Composition.csproj" />
-    <ProjectReference Include="..\CDP4Scripting\CDP4Scripting.csproj" />
+    <Compile Include="CDP4ScriptingModuleTestFixture.cs" />
+    <Compile Include="Helpers\AvalonEditExtensionsTestFixture.cs" />
+    <Compile Include="Helpers\EditorCompletionDataTestFixture.cs" />
+    <Compile Include="Helpers\ScriptingProxyTestFixture.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="DispatcherTestFixture.cs" />
+    <Compile Include="ViewModels\LuaScriptPanelViewModelTestFIxture.cs" />
+    <Compile Include="ViewModels\PythonScriptPanelViewModelTestFixture.cs" />
+    <Compile Include="ViewModels\ScriptingEngineRibbonPageGroupTestFixture.cs" />
+    <Compile Include="ViewModels\ScriptPanelViewModelTestFixture.cs" />
   </ItemGroup>
 </Project>

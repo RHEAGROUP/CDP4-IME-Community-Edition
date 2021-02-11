@@ -36,14 +36,6 @@ namespace CDP4Scripting.Tests
         /// <summary>
         /// The singleton <see cref="Application"/> that needs to be initialized ONLY ONCE!
         /// </summary>
-        public static Application application;
-
-        /// <summary>
-        /// Creates an instance of the <see cref="DispatcherTestFixture"/> class
-        /// </summary>
-        protected DispatcherTestFixture()
-        {
-            application = application ?? new Application();
-        }
+        private static Application application = new Application();
     }
 }
