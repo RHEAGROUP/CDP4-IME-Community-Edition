@@ -853,12 +853,12 @@ namespace CDP4DiagramEditor.ViewModels
         /// <summary>
         /// Show the <see cref="SelectedItem"/> in the Property Grid
         /// </summary>
-        protected override void ShowInPropertyGrid()
-        {
-            if (this.SelectedItem != null)
-            {
-                this.PanelNavigationService.Open(((IThingDiagramItem)this.SelectedItem).Thing, this.Session);
-            }
-        }
+        //protected override void ShowInPropertyGrid()
+        //{
+        //    if (this.SelectedItem != null)
+        //    {
+        //        this.PanelNavigationService.Open(((IThingDiagramItem)this.SelectedItem).Thing, this.Session);
+        //    }
+        //}
     }
 }

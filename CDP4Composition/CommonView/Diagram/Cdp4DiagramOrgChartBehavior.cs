@@ -440,22 +440,26 @@ namespace CDP4CommonView.Diagram
             ////////////////////////////
             //TODO: Incoming from GCD
             ////////////////////////////
-            //var vm = (ICdp4DiagramContainer) this.AssociatedObject.DataContext;
-            //var controlSelectedItems = this.AssociatedObject.SelectedItems.ToList();
+            var vm = (ICdp4DiagramContainer)this.AssociatedObject.DataContext;
+            var controlSelectedItems = this.AssociatedObject.SelectedItems.ToList();
 
-            //if (vm != null)
-            //{
-            //    vm.SelectedItems.Clear();
-            //    vm.SelectedItem = controlSelectedItems.FirstOrDefault();
+            if (vm != null)
+            {
+                vm.SelectedItems.Clear();
+                vm.SelectedItem = controlSelectedItems.FirstOrDefault();
 
-            //    foreach (var controlSelectedItem in controlSelectedItems)
-            //    {
-            //        vm.SelectedItems.Add(controlSelectedItem);
-            //    }
-            //}
+                foreach (var controlSelectedItem in controlSelectedItems)
+                {
+                    vm.SelectedItems.Add(controlSelectedItem);
+                }
+            }
             ////////////////////////////
 
-            this.EventPublisher.Publish(new DiagramSelectEvent(this.AssociatedObject.SelectedItems.Select(x => (IRowViewModelBase<DiagramElementThing>)x.DataContext).ToArray()));
+            ////////////////////////////
+            //TODO: Incoming from Development: What does this need to do?
+            ////////////////////////////
+            //this.EventPublisher.Publish(new DiagramSelectEvent(this.AssociatedObject.SelectedItems.Select(x => (IRowViewModelBase<DiagramContentItem>)x.DataContext).ToArray()));
+            ////////////////////////////
         }
 
         /// <summary>
