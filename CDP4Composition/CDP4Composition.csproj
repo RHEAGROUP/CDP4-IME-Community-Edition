@@ -589,6 +589,7 @@
     <Resource Include="Resources\Images\Thing\category_32x32.png" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="CommonView\Diagram\Views\DiagramPortShape.xaml" />
     <Page Include="CommonView\Items\AdvancedLayoutGroup.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -889,6 +890,7 @@
     <Compile Remove="obj\x64\Release\Views\SessionHeader.g.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Remove="CommonView\Diagram\Views\DiagramPortShape.xaml" />
     <None Remove="Resources\Images\cometlogo.png" />
     <None Remove="Resources\Images\cometlogo_48x48.png" />
     <None Remove="Views\CustomFilterEditorDialog.xaml" />
