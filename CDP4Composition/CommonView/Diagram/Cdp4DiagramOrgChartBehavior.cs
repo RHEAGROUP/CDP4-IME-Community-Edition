@@ -36,6 +36,7 @@ namespace CDP4CommonView.Diagram
     using System.Windows.Input;
 
     using CDP4Common.CommonData;
+    using CDP4Common.DiagramData;
     using CDP4Common.SiteDirectoryData;
 
     using CDP4CommonView.Diagram.ViewModels;
@@ -43,10 +44,11 @@ namespace CDP4CommonView.Diagram
 
     using CDP4Composition.Diagram;
     using CDP4Composition.DragDrop;
-
-    using DevExpress.Xpf.Diagram;
+    using CDP4Composition.Mvvm;
+    
     using DevExpress.Diagram.Core;
     using DevExpress.Diagram.Core.Layout;
+    using DevExpress.Xpf.Diagram;
     using DevExpress.Xpf.Ribbon;
     using DevExpress.Mvvm.UI;
 
@@ -121,6 +123,40 @@ namespace CDP4CommonView.Diagram
         public ICdp4DiagramContainer ViewModel { get; set; }
 
         /// <summary>
+        /// The ribbon merge category stored for cleanup.
+        /// </summary>
+        private RibbonPageCategoryBase mergeCategory;
+
+        /// <summary>
+        /// The ribbon merged categories stored for cleanup.
+        /// </summary>
+        private List<RibbonPageCategoryBase> mergedCategories;
+
+        /// <summary>
+        /// The main ribbon of the shell.
+        /// </summary>
+        private RibbonControl parentRibbon;
+
+        /// <summary>
+        /// Holds the value whether the view has loaded for the first time or it has appeared
+        /// <remarks>
+        /// Since the <see cref="Loaded"/> event handler gets called whenever the view reappears from not being active within its tabgroup
+        /// and then reappears, the value of <see cref="hasFirstLoadHappened"/> is used as a condition to draw the connector when the view did loaded for first time
+        /// </remarks>
+        /// </summary>
+        private bool hasFirstLoadHappened;
+
+        /// <summary>
+        /// Gets a dictionary of saved diagram item positions.
+        /// </summary>
+        public Dictionary<object, Point> ItemPositions { get; } = new Dictionary<object, Point>();
+
+        /// <summary>
+        /// Gets or sets the diagram editor viewmodel
+        /// </summary>
+        public ICdp4DiagramContainer ViewModel { get; set; }
+
+        /// <summary>
         /// The dependency property that allows setting the source to the view-model representing a diagram object
         /// </summary>
         public static readonly DependencyProperty DiagramObjectSourceProperty = DependencyProperty.Register("DiagramObjectSource", typeof(INotifyCollectionChanged), typeof(Cdp4DiagramOrgChartBehavior), new FrameworkPropertyMetadata(DiagramObjectSourceChanged));
@@ -146,6 +182,11 @@ namespace CDP4CommonView.Diagram
         public static readonly DependencyProperty RibbonMergeCategoryNameProperty = DependencyProperty.Register("RibbonMergeCategoryName", typeof(string), typeof(Cdp4DiagramOrgChartBehavior));
 
         /// <summary>
+        /// The dependency property that allows setting the <see cref="IEventPublisher"/>
+        /// </summary>
+        public static readonly DependencyProperty RibbonMergeCategoryNameProperty = DependencyProperty.Register("RibbonMergeCategoryName", typeof(string), typeof(Cdp4DiagramOrgChartBehavior));
+
+        /// <summary>
         /// Initializes static members of the <see cref="Cdp4DiagramOrgChartBehavior"/> class.
         /// </summary>
         static Cdp4DiagramOrgChartBehavior()
@@ -159,6 +200,15 @@ namespace CDP4CommonView.Diagram
         {
             get => (INotifyCollectionChanged) this.GetValue(DiagramObjectSourceProperty);
             set => this.SetValue(DiagramObjectSourceProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the <see cref="INotifyCollectionChanged"/> containing the view-momdel for the <see cref="DiagramContentItem"/>
+        /// </summary>
+        public INotifyCollectionChanged DiagramPortSource
+        {
+            get => (INotifyCollectionChanged) this.GetValue(DiagramPortSourceProperty);
+            set => this.SetValue(DiagramPortSourceProperty, value);
         }
 
         /// <summary>
@@ -405,6 +455,46 @@ namespace CDP4CommonView.Diagram
         ///<param name = "newValue" > The collection containing the new objects</param>
         private void ComputeOldNewDiagramPort(IList oldValue, IList newValue)
         {
+            this.ComputeOldNewDiagramPort(e.OldItems, e.NewItems);
+        }
+
+        ///<summary>
+        ///Compute the Diagram-objects
+        ///</summary>
+        ///<param name = "oldDiagramItems" > The collection containing the old objects</param>
+        ///<param name = "newDiagramItems" > The collection containing the new objects</param>
+        private void ComputeOldNewDiagramObject(IList oldDiagramItems, IList newDiagramItems)
+        {
+            if (oldDiagramItems != null)
+            {
+                foreach (IDiagramObjectViewModel item in oldDiagramItems)
+                {
+                    var diagramObj = this.AssociatedObject.Items.SingleOrDefault(x => x.DataContext == item);
+
+                    if (diagramObj != null)
+                    {
+                        this.AssociatedObject.Items.Remove(diagramObj);
+                    }
+                }
+            }
+
+            if (newDiagramItems != null)
+            {
+                foreach (IDiagramObjectViewModel item in newDiagramItems)
+                {
+                    var diagramObj = new Cdp4DiagramContentItem(item, this);
+                    this.AssociatedObject.Items.Add(diagramObj);
+                }
+            }
+        }
+
+        ///<summary>
+        ///Compute the Diagram-objects
+        ///</summary>
+        ///<param name = "oldValue" > The collection containing the old objects</param>
+        ///<param name = "newValue" > The collection containing the new objects</param>
+        private void ComputeOldNewDiagramPort(IList oldValue, IList newValue)
+        {
             if (oldValue != null)
             {
                 foreach (IDiagramPortViewModel item in oldValue)
@@ -501,6 +591,240 @@ namespace CDP4CommonView.Diagram
             this.AssociatedObject.PreviewDragOver += this.PreviewDragOver;
             this.AssociatedObject.PreviewDragLeave += this.PreviewDragLeave;
             this.AssociatedObject.PreviewDrop += this.PreviewDrop;
+            this.AssociatedObject.Loaded += this.Loaded;
+            this.AssociatedObject.Unloaded += this.Unloaded;
+            this.AssociatedObject.ItemsChanged += this.ItemsChanged;
+            this.AssociatedObject.ItemsDeleting += this.ItemsDeleting;
+
+        /// <summary>
+        /// Item move finished event handler to keep track of positions.
+        /// </summary>
+        /// <param name="sender">The sender</param>
+        /// <param name="e">The arguments</param>
+        private void AssociatedObjectOnItemsMoving(object sender, DiagramItemsMovingEventArgs e)
+        {
+            if(e.Stage == DiagramActionStage.Finished)
+            {
+                foreach (var content in e.Items)
+                {
+                    if (content.Item is DiagramContentItem namedThingDiagramContentItem)
+                    {
+                        if (this.ItemPositions.TryGetValue(namedThingDiagramContentItem.Content, out _))
+                        {
+                            this.ItemPositions[namedThingDiagramContentItem.Content] = content.NewDiagramPosition;
+                            namedThingDiagramContentItem.Position = content.NewDiagramPosition;
+
+                            this.ViewModel.RedrawConnectors((ThingDiagramContentItem)namedThingDiagramContentItem.Content);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Delete related port shape when ever an element definition gets deleted
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void ItemsDeleting(object sender, DiagramItemsDeletingEventArgs e)
+        {
+            foreach (var item in e.Items)
+            {
+                if (item is DiagramContentItem contentItem)
+                {
+                    if (contentItem.Content is PortContainerDiagramContentItem portContainer)
+                    {
+                        foreach (var portViewModel in portContainer.PortCollection.ToList())
+                        {
+                            this.AssociatedObject.Items.Remove(this.AssociatedObject.Items.OfType<DiagramPortShape>().FirstOrDefault(i => (IDiagramPortViewModel) i.DataContext == portViewModel));
+                        }
+
+                        portContainer.PortCollection.Clear();
+                    }
+
+                    foreach (var selected in this.AssociatedObject.SelectedItems.ToList())
+                    {
+                        this.AssociatedObject.UnselectItem(selected);
+                    }
+
+                    (this.AssociatedObject.DataContext as IDiagramEditorViewModel)?.RemoveDiagramThingItem(contentItem.Content);
+
+                    (contentItem.Content as ThingDiagramContentItem)?.PositionObservable.Dispose();
+                }
+
+                else if (item is Cdp4DiagramConnector connector)
+                {
+                    (this.AssociatedObject.DataContext as IDiagramEditorViewModel)?.RemoveDiagramThingItem(connector.DataContext);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Update ports position according to their element definition new position
+        /// </summary>
+        /// <param name="sender">The sender</param>
+        /// <param name="e">The arguments</param>
+        private void LayoutUpdated(object sender, EventArgs e)
+        {
+            foreach (var portContainer in this.AssociatedObject.Items.OfType<DiagramContentItem>().Select(i => i.Content as PortContainerDiagramContentItem))
+            {
+                portContainer?.UpdatePortLayout();
+            }
+        }
+
+        /// <summary>
+        /// ItemChanged event handler
+        /// </summary>
+        /// <param name="sender">The sender</param>
+        /// <param name="e">The arguments</param>
+        private void ItemsChanged(object sender, DiagramItemsChangedEventArgs e)
+        {
+            var thingDiagramContentItem = (e.Item as DiagramContentItem)?.Content as ThingDiagramContentItem;
+
+            if (e.Action == ItemsChangedAction.Removed)
+            {
+                if (e.Item is DiagramPortShape port)
+                {
+                    var container = this.AssociatedObject.Items.OfType<DiagramContentItem>().
+                        Select(i => i.Content).OfType<PortContainerDiagramContentItem>().
+                        FirstOrDefault(c => c.PortCollection.FirstOrDefault(p => p == port.DataContext) != null);
+                    container?.PortCollection.Remove(container.PortCollection.FirstOrDefault(i => i == port.DataContext));
+                }
+
+                e.Handled = true;
+            }
+            else
+            {
+                if (thingDiagramContentItem != null && thingDiagramContentItem.PositionObservable is null)
+                {
+                    // If you watch multiple values it will fires multiple times CAREFULL
+                    thingDiagramContentItem.PositionObservable = e.Item.WhenAnyValue(x => x.Position).Subscribe(x => thingDiagramContentItem.SetDirty());
+                }
+            }
+        }
+
+        /// <summary>
+        /// update the position of diagramContentItem according to position they have been assigned through <see cref="Cdp4DiagramOrgChartBehavior.ItemPositions"/>
+        /// </summary>
+        /// <param name="sender">The sender</param>
+        /// <param name="e">The arguments</param>
+        private void OnCustomLayoutItems(object sender, DiagramCustomLayoutItemsEventArgs e)
+        {
+            if (this.ItemPositions.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in e.Items)
+            {
+                if (((DiagramContentItem) item).Content is ThingDiagramContentItem namedThingDiagramContentItem)
+                {
+                    if (this.ItemPositions.TryGetValue(namedThingDiagramContentItem, out var itemPosition))
+                    {
+                        item.Position = itemPosition;
+                    }
+                }
+            }
+
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// On Unloaded event handler.
+        /// </summary>
+        /// <param name="sender">The sender diagram design control.</param>
+        /// <param name="e">Event arguments.</param>
+        private void Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is DiagramDesignerControl && this.mergeCategory != null)
+            {
+                // clean up merged category
+                this.ClearCategory();
+            }
+        }
+
+        /// <summary>
+        /// On Loaded event handler.
+        /// </summary>
+        /// <param name="sender">The sender diagram design control.</param>
+        /// <param name="e">Event arguments.</param>
+        private void Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is DiagramDesignerControl designControl && !string.IsNullOrWhiteSpace(this.RibbonMergeCategoryName))
+            {
+                // merge ribbon into category
+                this.MergeRibbonToCategory(designControl);
+            }
+
+            if (!this.hasFirstLoadHappened)
+            {
+                (this.AssociatedObject.DataContext as ICdp4DiagramContainer)?.ComputeDiagramConnector();
+                this.hasFirstLoadHappened = true;
+            }
+        }
+
+        /// <summary>
+        /// Clears the diagram ribbon from a specified RibbonCategory
+        /// </summary>
+        private void ClearCategory()
+        {
+            foreach (var ribbonPageCategoryBase in this.mergedCategories)
+            {
+                (this.mergeCategory as IRibbonMergingSupport)?.Unmerge(ribbonPageCategoryBase);
+            }
+
+            // select a valid selected page
+            this.parentRibbon.SelectedPage = this.parentRibbon.ActualCategories.FirstOrDefault(x => x is RibbonDefaultPageCategory)?.ActualPages.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Merges the diagram ribbon into a spcified RibbonCategory
+        /// </summary>
+        /// <param name="diagramDesignerControl">The diagram design control</param>
+        private void MergeRibbonToCategory(DiagramDesignerControl diagramDesignerControl)
+        {
+            var diagramRibbon = LayoutTreeHelper.GetVisualChildren(diagramDesignerControl).OfType<DiagramRibbonControl>().FirstOrDefault();
+
+            if (diagramRibbon != null)
+            {
+                // extract the main ribbon
+                var mainShell = LayoutTreeHelper.GetVisualParents(diagramDesignerControl).OfType<DXRibbonWindow>().FirstOrDefault();
+
+                if (mainShell != null || this.parentRibbon != null)
+                {
+                    if (mainShell != null)
+                    {
+                        this.parentRibbon = mainShell.ActualRibbon;
+                    }
+
+                    // get the category to merge controls into
+                    var category = this.parentRibbon.ActualCategories.FirstOrDefault(x => x.Name == this.RibbonMergeCategoryName);
+
+                    if (category == null)
+                    {
+                        return;
+                    }
+
+                    // only merge if the category is visible, its visibility is controlled by RibbonCategoryBehavior
+                    if (category.IsVisible)
+                    {
+                        this.mergedCategories = new List<RibbonPageCategoryBase>();
+
+                        foreach (var diagramRibbonActualCategory in diagramRibbon.ActualCategories)
+                        {
+                            this.mergedCategories.Add(diagramRibbonActualCategory);
+                            ((IRibbonMergingSupport) category).Merge(diagramRibbonActualCategory);
+                        }
+
+                        // set the selected page to the appropriate first selection
+                        this.parentRibbon.SelectedPage = category.ActualPages.FirstOrDefault() ?? this.mergedCategories.FirstOrDefault()?.ActualPages.FirstOrDefault();
+                    }
+
+                    // store category for cleanup
+                    this.mergeCategory = category;
+                }
+            }
+        }
 
         /// <summary>
         /// Item move finished event handler to keep track of positions.
